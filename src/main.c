@@ -1,7 +1,7 @@
-/* Copyright 2016, Eric Pernia.
+/* Copyright 2017-2018, Eric Pernia
  * All rights reserved.
  *
- * This file is part sAPI library for microcontrollers.
+ * This file is part of sAPI Library.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -28,315 +28,149 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
-/*
- * Date: 2016-04-26
- */
+/*==================[inlcusiones]============================================*/
 
+// Includes de FreeRTOS
+#include "FreeRTOS.h"
+#include "task.h"
+#include "sapi.h"
+#include "semphr.h"
 
+/*==================[definiciones y macros]==================================*/
 
-/*==================[inclusions]=============================================*/
+/*==================[definiciones de datos internos]=========================*/
+int aux = 0;
+unsigned int peso = 0;
 
-#include "main.h"
-#include "sapi.h"       // <= sAPI header
-#include <stdio.h>		//header file standard input / output functions
-#include <string.h>   	// <= Biblioteca de manejo de Strings
-
-
+/*==================[definiciones de datos externos]=========================*/
 DEBUG_PRINT_ENABLE;
+// Crear cola
+QueueHandle_t queue_tec_pulsada;
 
+/*==================[declaraciones de funciones internas]====================*/
 
-/*==================[macros and definitions]=================================*/
+/*==================[declaraciones de funciones externas]====================*/
 
-// Macros de las UART de bluetooth y WiFi
-#define UART_BLUETOOTH 	UART_232
-#define UART_WIFI  		UART_GPIO
+// Prototipo de funcion de la tarea
+void tarea_enviar_wifi( void* taskParmPtr );
+void tarea_recibir_wifi( void* taskParmPtr );
+void tarea_peso( void* taskParmPtr );
 
-// Se definen las funciones para setear como salida, entrada, leer, poner en cero
-// y poner en uno el pin correspondiente
-#define owOUT(port,pin)		Chip_GPIO_SetPinDIROutput(LPC_GPIO_PORT, port, pin)
-#define owIN(port,pin)		Chip_GPIO_SetPinDIRInput(LPC_GPIO_PORT, port, pin)
-#define owREAD(port,pin)	Chip_GPIO_GetPinState(LPC_GPIO_PORT, port, pin)
-#define owLOW(port,pin)		Chip_GPIO_SetPinOutLow(LPC_GPIO_PORT, port, pin)
-#define owHIGH(port,pin)	Chip_GPIO_SetPinOutHigh(LPC_GPIO_PORT, port, pin)
+/*==================[funcion principal]======================================*/
 
-// Se setean los pines para el módulo HX711
-// GPIO8 para el pin DT:
-#define dataport	2
-#define datapin		8
-// GPIO7 para SCK:
-#define clockport	3
-#define clockpin	7
-
-// Factor de calibración del módulo HX711
-#define SCALE		18400
-
-/*==================[internal data declaration]==============================*/
-
-// Offset de la balanza, que se utilizará para tararla
-volatile unsigned long OFFSET = 0;
-
-// Se define la frecuencia del Clock
-static uint32_t ClockSpeed = EDU_CIAA_NXP_CLOCK_SPEED;
-
-/*==================[internal functions declaration]=========================*/
-
-/*==================[internal data definition]===============================*/
-
-/*==================[external data definition]===============================*/
-
-/*==================[internal functions definition]==========================*/
-
-/*==================[external functions definition]==========================*/
-
-/*-------------------------------HX711 Pesaje--------------------------------*/
-
-
-// Se inicializa la conexión con el módulo HX711
-void owInit(void)
+// FUNCION PRINCIPAL, PUNTO DE ENTRADA AL PROGRAMA LUEGO DE ENCENDIDO O RESET.
+int main( void )
 {
-	// Se setea el pin GPIO8 para DT como entrada
-    Chip_SCU_PinMux(dataport,datapin,SCU_MODE_INACT  | SCU_MODE_ZIF_DIS, SCU_MODE_FUNC0 );
-    owIN(dataport,datapin);
+    // ---------- CONFIGURACIONES ------------------------------
+    // Inicializar y configurar la plataforma
+    boardConfig();
 
-    // Se setea el pin GPIO7 para SCK como salida
-    Chip_SCU_PinMux(clockport,clockpin,SCU_MODE_INACT  | SCU_MODE_ZIF_DIS, SCU_MODE_FUNC0 );
-    owOUT(clockport,clockpin);
+    // UART for debug messages
+    debugPrintConfigUart( UART_USB, 115200 );
+    debugPrintlnString( "TP Profesional." );
+
+    // Led para dar se�al de vida
+    gpioWrite( LED3 , ON );
+
+    queue_tec_pulsada = xQueueCreate(1,sizeof(unsigned int));
+
+    // Crear tarea en freeRTOS
+
+    xTaskCreate(
+    		tarea_recibir_wifi,                     	// Funcion de la tarea a ejecutar
+    		( const char * )"tarea_recibir_wifi",   // Nombre de la tarea como String amigable para el usuario
+    		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
+    		0,        	// Parametros de tarea
+    		tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
+    		0                           	// Puntero a la tarea creada en el sistema
+    	);
+
+    xTaskCreate(
+        tarea_enviar_wifi,                     // Funcion de la tarea a ejecutar
+        ( const char * )"tarea_enviar_wifi",   // Nombre de la tarea como String amigable para el usuario
+        configMINIMAL_STACK_SIZE*2, // Cantidad de stack de la tarea
+        0,                          // Parametros de tarea
+        tskIDLE_PRIORITY+1,         // Prioridad de la tarea
+        0                           // Puntero a la tarea creada en el sistema
+    );
+
+
+    	// Iniciar scheduler
+    vTaskStartScheduler();
+
+    // ---------- REPETIR POR SIEMPRE --------------------------
+    while( TRUE )
+    {
+        // Si cae en este while 1 significa que no pudo iniciar el scheduler
+    }
+
+    // NO DEBE LLEGAR NUNCA AQUI, debido a que a este programa se ejecuta
+    // directamenteno sobre un microcontroladore y no es llamado por ningun
+    // Sistema Operativo, como en el caso de un programa para PC.
+    return 0;
 }
 
-// Espera a que el módulo HX711 esté listo.
-void wait_ready(void) {
-	// Esta es una implementación bloqueante y detendrá el proceso hasta que una celda
-	// de carga esté conectada.
-	// Cuando DT = 0, el módulo HX711 está listo para enviar información
-	while (owREAD(dataport,datapin)) {
-	}
-}
+/*==================[definiciones de funciones internas]=====================*/
+
+/*==================[definiciones de funciones externas]=====================*/
 
 
-// Lee la información del módulo HX711
-unsigned long read_count(void)
+// Tarea que recibe un caracter de wifi (aca lo hacemos con presionar una vez la tecla 1)
+void tarea_recibir_wifi( void* taskParmPtr )
 {
-	unsigned long Count;
-	unsigned char i;
+	peso = 0;
 
-	// DT = 1, SCK = 0
-	owHIGH(dataport,datapin);
-	owLOW(clockport,clockpin);
-	Count=0;
-
-	// Se espera a que el módulo esté listo para enviar información
-	wait_ready();
-
-	// Se envian 24 pulsos al clock SCK y se va leyendo el pin DT
-	for (i=0;i<24;i++)
+	while( 1 )
 	{
-		owHIGH(clockport,clockpin);
-		Count=Count<<1;
-		owLOW(clockport,clockpin);
-		if(owREAD(dataport,datapin)){
-			Count++;
+		if( !gpioRead( TEC1 ) )
+		{
+			if (aux == 0){	//aux se usa para saber si se quiere pesar a la persona o se quiere medir el salto
+							//(la parte del salto todavia no esta implementada)
+				// Crea la tarea que pesa al usuario
+			    xTaskCreate(
+			    	tarea_peso,                     // Funcion de la tarea a ejecutar
+			        ( const char * )"tarea_peso",  	// Nombre de la tarea como String amigable para el usuario
+			        configMINIMAL_STACK_SIZE*2, 	 // Cantidad de stack de la tarea
+					0,            					// Parametros de tarea
+			        tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
+			        0                           	// Puntero a la tarea creada en el sistema
+			    );
+			}
 		}
 	}
-
-	// El pulso 25 define que la ganancia sea 128 e implica el final de la medición
-	owHIGH(clockport,clockpin);
-	Count=Count^0x800000;
-	owLOW(clockport,clockpin);
-
-	// Se devuelve el valor de la medición
-	return(Count);
 }
 
-// Se hace un promedio para que el valor sea el más exacto posible
-unsigned long read_average(int times) {
-	unsigned long sum = 0;
-	for (int i = 0; i < times; i++) {
-		sum += read_count();
-	}
-	return sum/times;
+//Tarea que pesa al usuario
+void tarea_peso( void* taskParmPtr )
+{
+	peso = rand();	//Peso del usuario
+	aux++;	//Se indica que ya se peso y que lo siguiente va a ser medir el salto, cuando lo indique el wifi
+	xQueueSend(queue_tec_pulsada , &peso,  portMAX_DELAY  );	//Se manda el peso por una cola
+	vTaskDelete(NULL);		//Se elimina la tarea luego de que termina de enviar la cola
 }
 
-// Se toma el valor promediado y se le resta el OFFSET
-unsigned long get_value(int times) {
-	return read_average(times) - OFFSET;
+// Tarea que envia el valor por wifi (aca se envia el valor de la cola por puerto serie y se prende un led)
+void tarea_enviar_wifi( void* taskParmPtr )
+{
+    while( TRUE )
+    {
+    	//Se recibe el valor de la cola y se lo imprime por puerto serie
+    	xQueueReceive(queue_tec_pulsada , &peso,  portMAX_DELAY );			// Esperamos tecla
+    	debugPrintlnString( "El peso es: ");
+    	debugPrintUInt(peso);
+    	debugPrintEnter();
 
+    	//Se prende un led
+    	gpioWrite(LED1, 1 );
+    	vTaskDelay(500);
+    	gpioWrite(LED1, 0 );
+
+    	//Se resetea el valor de aux porque por ahora solo se mide el peso
+    	aux = 0;
+
+    }
 }
 
-// Una vez restado el OFFSET, se divide por el valor de calibración
-unsigned long get_units(int times) {
-	unsigned long scale = get_value(times) / SCALE;
-
-	// La lectura a veces da un valor muy grande cuando se está en cero, así que
-	// se setea un valor máximo y si da mayor a él, se supone que se midió cero
-	if (scale >=300){
-		scale = 0;
-	}
-	return scale;
-}
-
-// Se tara la balanza y se define el valor de offset
-void tare(int times) {
-	double sum = read_average(times);
-	set_offset(sum);
-}
-
-// Se guarda el valor de offset en la variable OFFSET
-void set_offset(double offset) {
-	OFFSET = offset;
-}
-
-/*-------------------------------------------------------------*/
-
-
-// FUNCIÓN PRINCIPAL
-int main(void){
-
-	// Inicializaciones
-	boardConfig();
-	gpioConfig(GPIO7,GPIO_INPUT);
-	gpioConfig(GPIO8,GPIO_OUTPUT);
-	SystemCoreClockUpdate();
-	cyclesCounterConfig(ClockSpeed);
-	owInit();
-	tare(10);
-
-	/*debugPrintConfigUart(UART_USB, 115200 );
-	debugPrintString( "DEBUG c/sAPI\r\n" );*/
-
-	// Inicializar UART_232 para conectar al módulo bluetooth y UART_GPIO para el módulo WIFI
-	uartConfig( UART_BLUETOOTH, 9600 );
-	uartConfig( UART_WIFI, 115200 );
-
-	// Inicialización de variables
-	int state_flag = 0;			// Variable de switch
-	bool_t saltando = false;	// Indica si la persona está saltando o no
-
-	// Valores que se van a medir/calcular y mostrar por bluetooth y WiFi
-	unsigned long peso = 0;
-	float tiempo = 0;
-	float altura = 0;
-	float velocidad = 0;
-	float potencia = 0;
-
-	// Variables del bluetooth
-	char bt_data = 0;
-	bool_t bt_recibido = false;
-	char bt_send[50] = {};
-
-	// Variables del WiFi
-	char wifi_send[100] = {};
-
-		// Variables auxiliares
-	float peso_aux = 0;			// Se compara con el peso de la persona
-	uint32_t Counter = 0;		// Se guardan la cantidad de ciclos pasados
-	bool_t peso_state = true;	// Se coloca en false cuando ya se pesó a la persona
-	float g = 9.81;				// Gravedad en m/s
-	float tiempo_s = 0;			// Tiempo en segundos
-
-
-	// Loop
-	while(1){
-		saltando = false;
-		SystemCoreClockUpdate();
-
-		switch(state_flag){
-		// Se recibe un byte de bluetooth para saber cual es el siguiente paso
-		case 0:
-			delay(1000);
-			bt_data = 0;
-			bt_recibido = false;
-			while(!bt_recibido){
-				bt_recibido = uartReadByte(UART_BLUETOOTH, &bt_data);
-			}
-			// Si se recibió un 1 y todavía no se pesó a la persona, hay que pesarla
-			if (bt_data == 1 && peso_state == true){
-				state_flag = 1;
-			}
-			// Si se recibió un 2, hay que medir el salto
-			else if (bt_data == 2){
-				state_flag = 2;
-				}
-			break;
-
-		// Se pesa al usuario
-		case 1:
-			// Se pesa 4 veces inicialmente para que la medición sea lo más correcta posible
-			/*for (int i = 0; i < 4; i++){
-				get_units(5);
-			}
-			// Se pesa a la persona y se guarda el valor en la variable peso
-			delay(1000);
-			peso = get_units(10);
-			delay(1000);*/
-			peso = 67;
-			sprintf(bt_send, "OK|%u|",peso);
-			while (bt_recibido = uartReadByte(UART_BLUETOOTH, &bt_data) && bt_data == 1){
-				uartWriteString(UART_BLUETOOTH, bt_send);
-				delay(100);
-			}
-			// Se imprime la variable peso en la aplicación, a través del bluetooth
-			debugPrintString(bt_send);
-			// Se vuelve a esperar recibir un byte de bluetooth
-			state_flag = 0;
-			peso_state = false;
-			break;
-
-
-		// Medición del salto y los parámetros a partir de él
-		case 2:
-			delay(500);
-			peso_aux = peso;
-			tiempo = 0;
-
-			/*while(saltando == false){
-				// Se corrobora que el peso medido sea menor o igual al peso del usuario menos cinco
-				if (peso_aux >= (peso-5)){
-					peso_aux = get_units(1);
-				}
-				else{
-					// Cuando comienza a saltar, se resetea el contador de ciclos
-					saltando = true;
-					cyclesCounterReset();
-					// Se mide el peso hasta que este sea igual o mayor al peso menos 5 (es decir, ya cayó)
-					while(peso_aux <= (peso-5)){
-						peso_aux = get_units(1);
-					}
-					// Se cuentan los ciclos transcurridos en el salto
-					Counter = cyclesCounterRead();
-				}
-			}
-			// Se pasan los ciclos contados a ms y se calculan el tiempo, la altura, la velocidad y la potencia
-			tiempo=cyclesCounterToMs(Counter);*/
-			tiempo = 621.32;
-			tiempo_s = tiempo/1000;
-			altura = ((g * tiempo_s * tiempo_s)/8)*100;
-			velocidad = (g * tiempo_s) / 2;
-			potencia = peso * velocidad;
-
-			// Se envian los parámetros calculados a bluetooth
-			sprintf(bt_send, "OK2|%2.2f|%2.2f|%2.2f|%2.2f|",tiempo,altura,velocidad,potencia);
-			while (bt_recibido = uartReadByte(UART_BLUETOOTH, &bt_data) && bt_data == 2){
-				uartWriteString(UART_BLUETOOTH, bt_send);
-				delay(100);
-			}
-			debugPrintString(bt_send);
-			state_flag = 3;
-			break;
-		case 3:
-			// Se envían los parámetros calculados a WiFi
-			sprintf(wifi_send, "{\"val\":\"%2.2f|%2.2f|%2.2f|%2.2f|%2.2f\"}\n",peso,tiempo,altura,velocidad,potencia);
-			uartWriteString(UART_WIFI, wifi_send);
-			state_flag = 0;
-			peso_state = true;
-			break;
-		default:
-			break;
-		}
-	}
-
-}
-
-/* ******************************************************************************************************************************** */
+/*==================[fin del archivo]========================================*/
