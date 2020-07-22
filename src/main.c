@@ -37,8 +37,12 @@
 #include "task.h"
 #include "sapi.h"
 #include "semphr.h"
+#include "fsm_debounce.h"
 
 /*==================[definiciones y macros]==================================*/
+
+#define DEBOUNCE_TICK_TIME 40 / portTICK_RATE_MS
+
 
 /*==================[definiciones de datos internos]=========================*/
 int aux = 0;
@@ -78,6 +82,7 @@ int main( void )
 
     // Crear tarea en freeRTOS
 
+    BaseType_t res =
     xTaskCreate(
     		tarea_recibir_wifi,                     	// Funcion de la tarea a ejecutar
     		( const char * )"tarea_recibir_wifi",   // Nombre de la tarea como String amigable para el usuario
@@ -87,6 +92,12 @@ int main( void )
     		0                           	// Puntero a la tarea creada en el sistema
     	);
 
+    if(res == pdFAIL)
+        {
+        	//error
+        }
+
+    res =
     xTaskCreate(
         tarea_enviar_wifi,                     // Funcion de la tarea a ejecutar
         ( const char * )"tarea_enviar_wifi",   // Nombre de la tarea como String amigable para el usuario
@@ -96,6 +107,11 @@ int main( void )
         0                           // Puntero a la tarea creada en el sistema
     );
 
+
+    if(res == pdFAIL)
+        {
+        	//error
+        }
 
     	// Iniciar scheduler
     vTaskStartScheduler();
@@ -112,41 +128,27 @@ int main( void )
     return 0;
 }
 
-/*==================[definiciones de funciones internas]=====================*/
-
-/*==================[definiciones de funciones externas]=====================*/
 
 
 // Tarea que recibe un caracter de wifi (aca lo hacemos con presionar una vez la tecla 1)
 void tarea_recibir_wifi( void* taskParmPtr )
 {
+	fsmButtonInit();
 	peso = 0;
+	//debugPrintlnString( "Tarea Recibir WIFI" );
 
 	while( 1 )
 	{
-		if( !gpioRead( TEC1 ) )
-		{
-			if (aux == 0){	//aux se usa para saber si se quiere pesar a la persona o se quiere medir el salto
-							//(la parte del salto todavia no esta implementada)
-				// Crea la tarea que pesa al usuario
-			    xTaskCreate(
-			    	tarea_peso,                     // Funcion de la tarea a ejecutar
-			        ( const char * )"tarea_peso",  	// Nombre de la tarea como String amigable para el usuario
-			        configMINIMAL_STACK_SIZE*2, 	 // Cantidad de stack de la tarea
-					0,            					// Parametros de tarea
-			        tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
-			        0                           	// Puntero a la tarea creada en el sistema
-			    );
-			}
-		}
+		fsmButtonUpdate( TEC1 );
+		vTaskDelay( 1 / portTICK_RATE_MS );
 	}
 }
 
 //Tarea que pesa al usuario
 void tarea_peso( void* taskParmPtr )
 {
-	peso = rand();	//Peso del usuario
-	aux++;	//Se indica que ya se peso y que lo siguiente va a ser medir el salto, cuando lo indique el wifi
+	//debugPrintlnString( "Tarea peso" );
+	peso = 100;	//Peso del usuario
 	xQueueSend(queue_tec_pulsada , &peso,  portMAX_DELAY  );	//Se manda el peso por una cola
 	vTaskDelete(NULL);		//Se elimina la tarea luego de que termina de enviar la cola
 }
@@ -154,21 +156,25 @@ void tarea_peso( void* taskParmPtr )
 // Tarea que envia el valor por wifi (aca se envia el valor de la cola por puerto serie y se prende un led)
 void tarea_enviar_wifi( void* taskParmPtr )
 {
+	// ---------- CONFIGURACIONES ------------------------------
+		TickType_t xPeriodicity =  1000 / portTICK_RATE_MS;		// Tarea periodica cada 1000 ms
+		TickType_t xLastWakeTime = xTaskGetTickCount();
+	    // ---------- REPETIR POR SIEMPRE --------------------------
+		//debugPrintlnString( "Tarea Enviar WIFI" );
     while( TRUE )
     {
-    	//Se recibe el valor de la cola y se lo imprime por puerto serie
-    	xQueueReceive(queue_tec_pulsada , &peso,  portMAX_DELAY );			// Esperamos tecla
-    	debugPrintlnString( "El peso es: ");
-    	debugPrintUInt(peso);
-    	debugPrintEnter();
+    	unsigned int peso2;
+		//Se recibe el valor de la cola y se lo imprime por puerto serie
+		xQueueReceive(queue_tec_pulsada , &peso2,  portMAX_DELAY );			// Esperamos tecla
+		debugPrintlnString( "El peso es: ");
+		debugPrintUInt(peso2);
+		debugPrintEnter();
 
-    	//Se prende un led
-    	gpioWrite(LED1, 1 );
-    	vTaskDelay(500);
-    	gpioWrite(LED1, 0 );
+		gpioWrite( LED1 , 1 );
+		vTaskDelay( 40 / portTICK_RATE_MS );
+		gpioWrite( LED1 , 0 );
 
-    	//Se resetea el valor de aux porque por ahora solo se mide el peso
-    	aux = 0;
+		vTaskDelayUntil( &xLastWakeTime , xPeriodicity );
 
     }
 }
