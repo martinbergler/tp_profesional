@@ -48,6 +48,8 @@
 /*==================[definiciones de datos internos]=========================*/
 
 unsigned int weight;
+int count;
+
 /*==================[definiciones de datos externos]=========================*/
 
 
@@ -63,6 +65,7 @@ void clear_diff();
 
 // Prototipo de funcion de la tarea
 void tarea_weight( void* taskParmPtr );
+void tarea_jump( void* taskParmPtr );
 void tarea_Rx_WIFI( void* taskParmPtr );
 void tarea_Tx_WIFI( void* taskParmPtr );
 
@@ -86,6 +89,7 @@ int main( void )
     queue_calc_weight = xQueueCreate(1,sizeof(unsigned int));
 
     weight = 0;
+    count = 0;
 
     BaseType_t res =
     xTaskCreate(
@@ -142,7 +146,7 @@ void tarea_Rx_WIFI( void* taskParmPtr )
 
 	while( 1 )
 	{
-		fsmButtonUpdate( TEC1 );
+		fsmButtonUpdate( TEC1, count );
 	 	vTaskDelay( 1 / portTICK_RATE_MS );
 	}
 }
@@ -174,15 +178,38 @@ void tarea_weight( void* taskParmPtr )
 
 	TickType_t dif = *( (TickType_t*)  taskParmPtr );
 
-	gpioWrite( LEDB , 1 );
-	vTaskDelay( dif );
-	gpioWrite( LEDB , 0 );
+	while ( 1 ){
 
-	weight = 53;	//Peso fijo
-	xQueueSend(queue_calc_weight , &weight,  portMAX_DELAY);
+		count++;
 
-	vTaskDelete(NULL);
+		gpioWrite( LEDB , 1 );
+		vTaskDelay( dif );
+		gpioWrite( LEDB , 0 );
+
+		clear_diff();
+
+		weight = 53;	//Peso fijo
+		xQueueSend(queue_calc_weight , &weight,  portMAX_DELAY);
+
+		vTaskDelete(NULL);
+
+	}
+
 }
 
+
+// Implementacion de funcion de la tarea
+void tarea_jump( void* taskParmPtr )
+{
+    while( 1 )
+    {
+    	count = 0;
+		gpioWrite( LED2, ON );
+		vTaskDelay(100 / portTICK_RATE_MS);
+		gpioWrite( LED2, OFF );
+
+		vTaskDelete(NULL);
+    }
+}
 
 /*==================[fin del archivo]========================================*/
