@@ -35,32 +35,36 @@
 // Includes de FreeRTOS
 #include "FreeRTOS.h"
 #include "task.h"
-#include "sapi.h"
 #include "semphr.h"
-#include "fsm_debounce.h"
+#include "tipos.h"
+
+// sAPI header
+#include "sapi.h"
+
+#include "FreeRTOSConfig.h"
 
 /*==================[definiciones y macros]==================================*/
 
-#define DEBOUNCE_TICK_TIME 40 / portTICK_RATE_MS
-
-
 /*==================[definiciones de datos internos]=========================*/
-int aux = 0;
-unsigned int peso = 0;
+
+unsigned int weight;
 
 /*==================[definiciones de datos externos]=========================*/
-DEBUG_PRINT_ENABLE;
-// Crear cola
-QueueHandle_t queue_tec_pulsada;
 
+
+DEBUG_PRINT_ENABLE;
+
+QueueHandle_t queue_calc_weight;
 /*==================[declaraciones de funciones internas]====================*/
 
 /*==================[declaraciones de funciones externas]====================*/
+TickType_t get_diff();
+void clear_diff();
 
 // Prototipo de funcion de la tarea
-void tarea_enviar_wifi( void* taskParmPtr );
-void tarea_recibir_wifi( void* taskParmPtr );
-void tarea_peso( void* taskParmPtr );
+void tarea_weight( void* taskParmPtr );
+void tarea_Rx_WIFI( void* taskParmPtr );
+void tarea_Tx_WIFI( void* taskParmPtr );
 
 /*==================[funcion principal]======================================*/
 
@@ -75,43 +79,40 @@ int main( void )
     debugPrintConfigUart( UART_USB, 115200 );
     debugPrintlnString( "TP Profesional." );
 
-    // Led para dar señal de vida
-    gpioWrite( LED3 , ON );
+    // Led para dar seï¿½al de vida
+    gpioWrite( LED3, ON );
 
-    queue_tec_pulsada = xQueueCreate(1,sizeof(unsigned int));
-
-    // Crear tarea en freeRTOS
+    queue_calc_weight = xQueueCreate(1,sizeof(unsigned int));
 
     BaseType_t res =
     xTaskCreate(
-    		tarea_recibir_wifi,                     	// Funcion de la tarea a ejecutar
-    		( const char * )"tarea_recibir_wifi",   // Nombre de la tarea como String amigable para el usuario
-    		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
-    		0,        	// Parametros de tarea
-    		tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
-    		0                           	// Puntero a la tarea creada en el sistema
-    	);
+    	tarea_Rx_WIFI,                     // Funcion de la tarea a ejecutar
+        ( const char * )"tarea_Rx",   // Nombre de la tarea como String amigable para el usuario
+        configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
+        0,                          	// Parametros de tarea
+        tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
+        0                           	// Puntero a la tarea creada en el sistema
+    );
 
     if(res == pdFAIL)
-        {
-        	//error
-        }
+    {
+    	//error
+    }
 
     res =
     xTaskCreate(
-        tarea_enviar_wifi,                     // Funcion de la tarea a ejecutar
-        ( const char * )"tarea_enviar_wifi",   // Nombre de la tarea como String amigable para el usuario
-        configMINIMAL_STACK_SIZE*2, // Cantidad de stack de la tarea
-        0,                          // Parametros de tarea
-        tskIDLE_PRIORITY+1,         // Prioridad de la tarea
-        0                           // Puntero a la tarea creada en el sistema
+    	tarea_Tx_WIFI,                     // Funcion de la tarea a ejecutar
+        ( const char * )"tarea_Tx",   // Nombre de la tarea como String amigable para el usuario
+        configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
+        0,                          	// Parametros de tarea
+        tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
+        0                           	// Puntero a la tarea creada en el sistema
     );
 
-
     if(res == pdFAIL)
-        {
-        	//error
-        }
+    {
+    	//error
+    }
 
     	// Iniciar scheduler
     vTaskStartScheduler();
@@ -128,53 +129,56 @@ int main( void )
     return 0;
 }
 
+/*==================[definiciones de funciones internas]=====================*/
 
+/*==================[definiciones de funciones externas]=====================*/
 
-// Tarea que recibe un caracter de wifi (aca lo hacemos con presionar una vez la tecla 1)
-void tarea_recibir_wifi( void* taskParmPtr )
+void tarea_Rx_WIFI( void* taskParmPtr )
 {
 	fsmButtonInit();
-	peso = 0;
-	//debugPrintlnString( "Tarea Recibir WIFI" );
+	weight = 0;
 
 	while( 1 )
 	{
 		fsmButtonUpdate( TEC1 );
-		vTaskDelay( 1 / portTICK_RATE_MS );
+	 	vTaskDelay( 1 / portTICK_RATE_MS );
 	}
 }
 
-//Tarea que pesa al usuario
-void tarea_peso( void* taskParmPtr )
+// Implementacion de funcion de la tarea
+void tarea_weight( void* taskParmPtr )
 {
-	//debugPrintlnString( "Tarea peso" );
-	peso = 100;	//Peso del usuario
-	xQueueSend(queue_tec_pulsada , &peso,  portMAX_DELAY  );	//Se manda el peso por una cola
-	vTaskDelete(NULL);		//Se elimina la tarea luego de que termina de enviar la cola
+    // ---------- CONFIGURACIONES ------------------------------
+
+    // ---------- REPETIR POR SIEMPRE --------------------------
+
+	TickType_t dif = *( (TickType_t*)  taskParmPtr );
+
+	gpioWrite( LEDB , 1 );
+	vTaskDelay( dif );
+	gpioWrite( LEDB , 0 );
+
+	weight = rand();
+	xQueueSend(queue_calc_weight , &weight,  portMAX_DELAY);
+
+	vTaskDelete(NULL);
 }
 
-// Tarea que envia el valor por wifi (aca se envia el valor de la cola por puerto serie y se prende un led)
-void tarea_enviar_wifi( void* taskParmPtr )
+// Implementacion de funcion de la tarea
+void tarea_Tx_WIFI( void* taskParmPtr )
 {
-	// ---------- CONFIGURACIONES ------------------------------
-		TickType_t xPeriodicity =  1000 / portTICK_RATE_MS;		// Tarea periodica cada 1000 ms
-		TickType_t xLastWakeTime = xTaskGetTickCount();
-	    // ---------- REPETIR POR SIEMPRE --------------------------
-		//debugPrintlnString( "Tarea Enviar WIFI" );
     while( TRUE )
     {
-    	unsigned int peso2;
-		//Se recibe el valor de la cola y se lo imprime por puerto serie
-		xQueueReceive(queue_tec_pulsada , &peso2,  portMAX_DELAY );			// Esperamos tecla
-		debugPrintlnString( "El peso es: ");
-		debugPrintUInt(peso2);
-		debugPrintEnter();
 
-		gpioWrite( LED1 , 1 );
-		vTaskDelay( 40 / portTICK_RATE_MS );
-		gpioWrite( LED1 , 0 );
+    	if(xQueueReceive(queue_calc_weight , &weight,  portMAX_DELAY)){			// Esperamos tecla
 
-		vTaskDelayUntil( &xLastWakeTime , xPeriodicity );
+			gpioWrite( LED1, ON );
+			vTaskDelay(40 / portTICK_RATE_MS);
+			gpioWrite( LED1, OFF );
+
+			debugPrintString( "El peso es: " );
+			debugPrintlnUInt(weight);
+    	}
 
     }
 }

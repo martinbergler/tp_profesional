@@ -29,7 +29,25 @@
  *
  */
 
-#include "../../../RTOS1/Ej_1_3/inc/fsm_debounce.h"
+#include "sapi.h"
+
+#include "../../../RTOS1/Ej_1_3_task_delete/inc/FreeRTOSConfig.h"
+#include "FreeRTOS.h"
+#include "task.h"
+
+typedef enum
+{
+    STATE_BUTTON_UP,
+    STATE_BUTTON_DOWN,
+    STATE_BUTTON_FALLING,
+    STATE_BUTTON_RISING
+} fsmButtonState_t;
+
+void fsmButtonError( void );
+void fsmButtonInit( void );
+void fsmButtonUpdate( gpioMap_t tecla );
+void buttonPressed( void );
+void buttonReleased( void );
 
 fsmButtonState_t fsmButtonState;
 
@@ -37,8 +55,8 @@ TickType_t tiempo_down;
 TickType_t tiempo_up;
 TickType_t tiempo_diff;
 
-//Prototipo de la tarea peso
-void tarea_peso( void* taskParmPtr );
+/* prototipo de la tarea led   */
+void tarea_weight( void* taskParmPtr );
 
 TickType_t get_diff()
 {
@@ -63,21 +81,18 @@ void buttonReleased( void )
 	tiempo_up = xTaskGetTickCount();
 	tiempo_diff = tiempo_up - tiempo_down;
 
-	//Se crea la tarea peso
+	// Crear tarea en freeRTOS
 	BaseType_t res =
 	xTaskCreate(
-		tarea_peso,                     // Funcion de la tarea a ejecutar
-		( const char * )"tarea_peso",  	// Nombre de la tarea como String amigable para el usuario
-		configMINIMAL_STACK_SIZE*2, 	 // Cantidad de stack de la tarea
-		0,            					// Parametros de tarea
-		tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
+		tarea_weight,                     	// Funcion de la tarea a ejecutar
+		( const char * )"tarea_weight",   	// Nombre de la tarea como String amigable para el usuario
+		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
+		&tiempo_diff,                	// Parametros de tarea
+		tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
 		0                           	// Puntero a la tarea creada en el sistema
 	);
 
-    if(res == pdFAIL)
-		{
-		   //error
-		}
+
 }
 
 void fsmButtonError( void )
@@ -95,6 +110,8 @@ void fsmButtonInit( void )
 // FSM Update Sate Function
 void fsmButtonUpdate( gpioMap_t tecla )
 {
+   // static bool_t flagFalling = FALSE;
+    static bool_t flagRising = FALSE;
 
     static uint8_t contFalling = 0;
     static uint8_t contRising = 0;

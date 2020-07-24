@@ -48,6 +48,7 @@ extern uint32_t SystemCoreClock;
 extern int DbgConsole_Printf( const char *fmt_s, ... );
 #endif
 
+//#define configUSE_TIME_SLICING 						1
 
 #define configSUPPORT_STATIC_ALLOCATION              0
 
