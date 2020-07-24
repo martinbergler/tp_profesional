@@ -36,13 +36,10 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-#include "tipos.h"
 
-// sAPI header
 #include "sapi.h"
 
 #include "FreeRTOSConfig.h"
-
 /*==================[definiciones y macros]==================================*/
 
 /*==================[definiciones de datos internos]=========================*/
@@ -55,6 +52,7 @@ int count;
 
 DEBUG_PRINT_ENABLE;
 
+//Handle de la cola
 QueueHandle_t queue_calc_weight;
 
 /*==================[declaraciones de funciones internas]====================*/
@@ -86,11 +84,14 @@ int main( void )
     // Led para dar señal de vida
     gpioWrite( LED3, ON );
 
+    // Creación de la cola
     queue_calc_weight = xQueueCreate(1,sizeof(unsigned int));
 
-    weight = 0;
-    count = 0;
+    // Inicialización de variables
+    weight = 0; // Variable que guarda el peso
+    count = 0;	// Contador que permite saber si se midió el peso o el salto
 
+    // Creación de las tareas
     BaseType_t res =
     xTaskCreate(
     	tarea_Rx_WIFI,                     // Funcion de la tarea a ejecutar
@@ -139,6 +140,7 @@ int main( void )
 /*==================[definiciones de funciones internas]=====================*/
 
 /*==================[definiciones de funciones externas]=====================*/
+
 
 void tarea_Rx_WIFI( void* taskParmPtr )
 {
