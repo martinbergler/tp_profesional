@@ -48,13 +48,13 @@
 /*==================[definiciones de datos internos]=========================*/
 
 unsigned int weight;
-
 /*==================[definiciones de datos externos]=========================*/
 
 
 DEBUG_PRINT_ENABLE;
 
 QueueHandle_t queue_calc_weight;
+
 /*==================[declaraciones de funciones internas]====================*/
 
 /*==================[declaraciones de funciones externas]====================*/
@@ -65,6 +65,7 @@ void clear_diff();
 void tarea_weight( void* taskParmPtr );
 void tarea_Rx_WIFI( void* taskParmPtr );
 void tarea_Tx_WIFI( void* taskParmPtr );
+
 
 /*==================[funcion principal]======================================*/
 
@@ -79,10 +80,12 @@ int main( void )
     debugPrintConfigUart( UART_USB, 115200 );
     debugPrintlnString( "TP Profesional." );
 
-    // Led para dar seï¿½al de vida
+    // Led para dar señal de vida
     gpioWrite( LED3, ON );
 
     queue_calc_weight = xQueueCreate(1,sizeof(unsigned int));
+
+    weight = 0;
 
     BaseType_t res =
     xTaskCreate(
@@ -136,13 +139,30 @@ int main( void )
 void tarea_Rx_WIFI( void* taskParmPtr )
 {
 	fsmButtonInit();
-	weight = 0;
 
 	while( 1 )
 	{
 		fsmButtonUpdate( TEC1 );
 	 	vTaskDelay( 1 / portTICK_RATE_MS );
 	}
+}
+
+// Implementacion de funcion de la tarea
+void tarea_Tx_WIFI( void* taskParmPtr )
+{
+    while( 1 )
+    {
+    	if(xQueueReceive(queue_calc_weight , &weight,  portMAX_DELAY)){			// Esperamos tecla
+
+			gpioWrite( LED1, ON );
+			vTaskDelay(40 / portTICK_RATE_MS);
+			gpioWrite( LED1, OFF );
+
+			debugPrintString( "El peso es: " );
+			debugPrintlnUInt(weight);
+    	}
+
+    }
 }
 
 // Implementacion de funcion de la tarea
@@ -158,29 +178,11 @@ void tarea_weight( void* taskParmPtr )
 	vTaskDelay( dif );
 	gpioWrite( LEDB , 0 );
 
-	weight = rand();
+	weight = 53;	//Peso fijo
 	xQueueSend(queue_calc_weight , &weight,  portMAX_DELAY);
 
 	vTaskDelete(NULL);
 }
 
-// Implementacion de funcion de la tarea
-void tarea_Tx_WIFI( void* taskParmPtr )
-{
-    while( TRUE )
-    {
-
-    	if(xQueueReceive(queue_calc_weight , &weight,  portMAX_DELAY)){			// Esperamos tecla
-
-			gpioWrite( LED1, ON );
-			vTaskDelay(40 / portTICK_RATE_MS);
-			gpioWrite( LED1, OFF );
-
-			debugPrintString( "El peso es: " );
-			debugPrintlnUInt(weight);
-    	}
-
-    }
-}
 
 /*==================[fin del archivo]========================================*/

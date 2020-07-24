@@ -88,10 +88,14 @@ void buttonReleased( void )
 		( const char * )"tarea_weight",   	// Nombre de la tarea como String amigable para el usuario
 		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
 		&tiempo_diff,                	// Parametros de tarea
-		tskIDLE_PRIORITY+1,         	// Prioridad de la tarea
+		tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
 		0                           	// Puntero a la tarea creada en el sistema
 	);
 
+	if(res == pdFAIL)
+	{
+		//error
+	}
 
 }
 
