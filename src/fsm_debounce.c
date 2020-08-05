@@ -31,7 +31,7 @@
 
 #include "sapi.h"
 
-#include "../../../RTOS1/Ej_1_3_task_delete/inc/FreeRTOSConfig.h"
+#include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
