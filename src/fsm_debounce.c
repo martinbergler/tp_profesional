@@ -45,9 +45,9 @@ typedef enum
 
 void fsmButtonError( void );
 void fsmButtonInit( void );
-void fsmButtonUpdate( gpioMap_t tecla, int count );
+void fsmButtonUpdate( gpioMap_t tecla );
 void buttonPressed( void );
-void buttonReleased( int count );
+void buttonReleased( void );
 
 fsmButtonState_t fsmButtonState;
 
@@ -56,8 +56,11 @@ TickType_t tiempo_up;
 TickType_t tiempo_diff;
 
 /* prototipo de la tarea led   */
-void tarea_weight( void* taskParmPtr );
-void tarea_jump( void* taskParmPtr );
+void tarea_medir( void* taskParmPtr );
+
+// Handles de las tareas
+TaskHandle_t TaskHandle_medir;
+//TaskHandle_t TaskHandle_medicion;
 
 TickType_t get_diff()
 {
@@ -77,46 +80,26 @@ void buttonPressed( void )
 }
 
 /* accion de el evento de tecla liberada */
-void buttonReleased( int count )
+void buttonReleased( void )
 {
 	tiempo_up = xTaskGetTickCount();
 	tiempo_diff = tiempo_up - tiempo_down;
 
-	if ( count == 0){
-		// Crear tarea en freeRTOS
-		BaseType_t res =
-		xTaskCreate(
-			tarea_weight,                     	// Funcion de la tarea a ejecutar
-			( const char * )"tarea_weight",   	// Nombre de la tarea como String amigable para el usuario
-			configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
-			&tiempo_diff,                	// Parametros de tarea
-			tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
-			0                           	// Puntero a la tarea creada en el sistema
-		);
+	// Crear tarea en freeRTOS
+	BaseType_t res =
+	xTaskCreate(
+		tarea_medir,                     	// Funcion de la tarea a ejecutar
+		( const char * )"tarea_medir",   	// Nombre de la tarea como String amigable para el usuario
+		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
+		&tiempo_diff,                	// Parametros de tarea
+		tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
+		&TaskHandle_medir                          	// Puntero a la tarea creada en el sistema
+	);
 
-		if(res == pdFAIL)
-		{
-			//error
-		}
+	if(res == pdFAIL)
+	{
+		//error
 	}
-	else{
-		// Crear tarea en freeRTOS
-		BaseType_t res =
-		xTaskCreate(
-			tarea_jump,                     	// Funcion de la tarea a ejecutar
-			( const char * )"tarea_jump",   	// Nombre de la tarea como String amigable para el usuario
-			configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
-			&tiempo_diff,                	// Parametros de tarea
-			tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
-			0                           	// Puntero a la tarea creada en el sistema
-		);
-
-		if(res == pdFAIL)
-		{
-			//error
-		}
-	}
-
 
 }
 
@@ -133,7 +116,7 @@ void fsmButtonInit( void )
 #define DEBOUNCE_TIME 40
 
 // FSM Update Sate Function
-void fsmButtonUpdate( gpioMap_t tecla, int count )
+void fsmButtonUpdate( gpioMap_t tecla)
 {
    // static bool_t flagFalling = FALSE;
     static bool_t flagRising = FALSE;
@@ -197,7 +180,7 @@ void fsmButtonUpdate( gpioMap_t tecla, int count )
                     fsmButtonState = STATE_BUTTON_UP;
 
                     /* ACCION DEL EVENTO ! */
-                    buttonReleased( count );
+                    buttonReleased();
                 }
                 else
                 {
