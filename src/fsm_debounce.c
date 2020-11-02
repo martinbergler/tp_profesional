@@ -34,6 +34,7 @@
 #include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "auxs.h"
 
 typedef enum
 {
@@ -98,7 +99,9 @@ void buttonReleased( void )
 
 	if(res == pdFAIL)
 	{
-		//error
+		gpioWrite( LED_ERROR , ON );
+		printf( MSG_ERROR_TASK );
+		while(TRUE);
 	}
 
 }
