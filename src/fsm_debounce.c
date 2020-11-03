@@ -34,6 +34,7 @@
 #include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "auxs.h"
 
 typedef enum
 {
@@ -56,10 +57,10 @@ TickType_t tiempo_up;
 TickType_t tiempo_diff;
 
 /* prototipo de la tarea led   */
-void tarea_medir( void* taskParmPtr );
+void task_measurement( void* taskParmPtr );
 
 // Handles de las tareas
-TaskHandle_t TaskHandle_medir;
+TaskHandle_t TaskHandle_measurement;
 //TaskHandle_t TaskHandle_medicion;
 
 TickType_t get_diff()
@@ -88,18 +89,19 @@ void buttonReleased( void )
 	// Crear tarea en freeRTOS
 	BaseType_t res =
 	xTaskCreate(
-		tarea_medir,                     	// Funcion de la tarea a ejecutar
-		( const char * )"tarea_medir",   	// Nombre de la tarea como String amigable para el usuario
+		task_measurement,                     	// Funcion de la tarea a ejecutar
+		( const char * )"task_measurement",   	// Nombre de la tarea como String amigable para el usuario
 		configMINIMAL_STACK_SIZE*2, 	// Cantidad de stack de la tarea
 		&tiempo_diff,                	// Parametros de tarea
 		tskIDLE_PRIORITY+2,         	// Prioridad de la tarea
-		&TaskHandle_medir                          	// Puntero a la tarea creada en el sistema
+		&TaskHandle_measurement                         	// Puntero a la tarea creada en el sistema
 	);
 
-	if(res == pdFAIL){
-		gpioWrite( LED2 , ON);
-		while(TRUE){
-		}
+	if(res == pdFAIL)
+	{
+		gpioWrite( LED_ERROR , ON );
+		printf( MSG_ERROR_TASK );
+		while(TRUE);
 	}
 
 }

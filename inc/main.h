@@ -10,15 +10,22 @@
 #include "semphr.h"
 #include "sapi.h"
 #include "FreeRTOSConfig.h"
-
 #include "tasks_wifi.h"
 #include "tasks_force.h"
 #include "auxs.h"
-/*==================[definiciones de datos externos]=========================*/
-DEBUG_PRINT_ENABLE;
 
 /*==================[definiciones y macros]==================================*/
-#define BAUD_RATE 115200
-#define UART UART_USB
+
+/*==================[definiciones de datos internos]=========================*/
+
+/*==================[definiciones de datos externos]=========================*/
+
+/*==================[declaraciones de funciones internas]====================*/
+
+/*==================[declaraciones de funciones externas]====================*/
+
+/*==================[funcion principal]======================================*/
+
 
 #endif /* _MAIN_H_ */
+
