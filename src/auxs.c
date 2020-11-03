@@ -13,10 +13,7 @@
 /*==================[definiciones de datos internos]=========================*/
 
 /*==================[definiciones de datos externos]=========================*/
-gpioMap_t teclas[] = {TEC1,TEC2,TEC3,TEC4};
 gpioMap_t leds[]   = {LEDB,LED1,LED2,LED3};
-
-#define N_TECLAS  sizeof(teclas)/sizeof(gpioMap_t)		// 4 * (gpioMap_t / gpioMap_t) = 4
 
 /*==================[declaraciones de funciones internas]====================*/
 
@@ -37,7 +34,7 @@ void tarea_crear(TaskFunction_t tarea,const char * const nombre,uint8_t stack,vo
 	if(res == pdFAIL)
 	{
 		gpioWrite( LED_ERROR , ON );
-		uartWriteString(UART, MSG_ERROR_TASK );
+		printf( MSG_ERROR_TASK );
 		while(TRUE);						// VER ESTE LINK: https://pbs.twimg.com/media/BafQje7CcAAN5en.jpg
 	}
 }
@@ -47,7 +44,7 @@ void cola_crear(QueueHandle_t nombre, UBaseType_t longitud, UBaseType_t escala){
 	nombre = xQueueCreate(longitud, escala);
 	if (nombre == NULL){
 		gpioWrite( LED_ERROR , ON );
-		uartWriteString(UART, MSG_ERROR_QUEUE);
+		printf( MSG_ERROR_QUEUE);
 		while(TRUE);
 	}
 }
@@ -56,7 +53,7 @@ void sem_crear(SemaphoreHandle_t nombre){
 	nombre =  xSemaphoreCreateBinary();
 	if (nombre == NULL){
 		gpioWrite( LED_ERROR , ON );
-		uartWriteString(UART, MSG_ERROR_SEM);
+		printf( MSG_ERROR_SEM);
 		while(TRUE);
 	}
 }

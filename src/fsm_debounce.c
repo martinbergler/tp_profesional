@@ -34,7 +34,6 @@
 #include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "auxs.h"
 
 typedef enum
 {
@@ -97,11 +96,10 @@ void buttonReleased( void )
 		&TaskHandle_medir                          	// Puntero a la tarea creada en el sistema
 	);
 
-	if(res == pdFAIL)
-	{
-		gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_TASK );
-		while(TRUE);
+	if(res == pdFAIL){
+		gpioWrite( LED2 , ON);
+		while(TRUE){
+		}
 	}
 
 }

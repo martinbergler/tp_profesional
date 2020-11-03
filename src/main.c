@@ -1,20 +1,14 @@
+/*==================[inlcusiones]============================================*/
 #include "main.h"
 
+/*==================[definiciones de datos externos]=========================*/
 DEBUG_PRINT_ENABLE;
 
-//Handle de la cola
+//Handle de las colas y semaforos
 extern QueueHandle_t cola_datos_calculados;
 extern QueueHandle_t cola_tarar;
 extern QueueHandle_t cola_fuerza;
 extern SemaphoreHandle_t sem_medir_fuerza;
-
-/*==================[declaraciones de funciones internas]====================*/
-
-/*==================[declaraciones de funciones externas]====================*/
-
-/*==================[definiciones de datos internos]=========================*/
-
-extern volatile unsigned long OFFSET;
 
 /*==================[funcion principal]======================================*/
 
@@ -24,8 +18,8 @@ int main( void )
     // ---------- CONFIGURACIONES ------------------------------
     // Inicializar y configurar la plataforma
     boardConfig();
-    HX711Config();
-
+    gpioConfig(ClockPin , GPIO_OUTPUT);
+	gpioConfig(DataPin , GPIO_INPUT);
 
     // UART for debug messages
     debugPrintConfigUart( UART, BAUD_RATE );
@@ -35,41 +29,52 @@ int main( void )
     gpioWrite( LED3, ON );
 
     // Creación de la cola
-	/*cola_crear(cola_datos_calculados,CANT_MEDICIONES,SIZE_UINT);
-	cola_crear(cola_tarar,SIZE,SIZE_UINT);
-	cola_crear(cola_fuerza,SIZE,SIZE_UINT);*/
-
-	// Creación del semáforo
-	//sem_crear(sem_medir_fuerza);
-
-    // Creación de la cola
-    cola_datos_calculados = xQueueCreate(CANT_MEDICIONES,sizeof(unsigned int));
-    cola_tarar = xQueueCreate(1,sizeof(unsigned int));
-    cola_fuerza = xQueueCreate(1,sizeof(unsigned int));
-
-    if (cola_datos_calculados == NULL || cola_tarar == NULL || cola_fuerza == NULL){
-    	gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_QUEUE );
-		while(TRUE);
-    }
+    cola_crear(cola_datos_calculados,CANT_MEDICIONES,SIZE_UINT);
+    cola_crear(cola_tarar,SIZE,SIZE_UINT);
+    cola_crear(cola_fuerza,SIZE,SIZE_UINT);
 
     // Creación del semáforo
-    sem_medir_fuerza = xSemaphoreCreateBinary();
+    sem_crear(sem_medir_fuerza);
 
-    if(sem_medir_fuerza == NULL){
-    	gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_SEM );
-		while(TRUE);
+    /*cola_datos_calculados = xQueueCreate(CANT_MEDICIONES,sizeof(unsigned int)); //VALIDAR CONTRA NULL (while 1 si falla)
+    if (cola_datos_calculados == NULL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación cola_datos_calculados" );
+    	while(TRUE){
+    	}
     }
+    cola_tarar = xQueueCreate(1,sizeof(unsigned int));	//DESTRUIR COLA EN TAREAS
+    if (cola_tarar == NULL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación cola_tarar" );
+        	while(TRUE){
+        	}
+        }
+    cola_fuerza = xQueueCreate(1,sizeof(unsigned int));
+    if (cola_fuerza == NULL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación cola_fuerza" );
+            	while(TRUE){
+            	}
+            }
+
+    // Creación del semáforo
+    sem_medir_fuerza = xSemaphoreCreateBinary();	//DESTRUIR SEMAFORO EN TAREAS (VER) CONVIENE DEJAR LA MEMORIA PEDIDA ANTES QUE BORRAR Y VOLVER A CREAR
+    if (sem_medir_fuerza == NULL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación sem_medir_fuerza" );
+            	while(TRUE){
+            	}
+            }*/
+    //sem_promediar_medicion = xSemaphoreCreateCounting(  , 0 );
+
 
     // Creación y validacion de las tareas
-	tarea_crear(tarea_tarar,"tarea_tarar",SIZE,0,PRIORITY+1,NULL);
-	tarea_crear(tarea_Rx_WIFI,"tarea_Rx",SIZE,0,PRIORITY,NULL);
-	tarea_crear(tarea_Tx_WIFI,"tarea_Tx",SIZE,0,PRIORITY,NULL);
+    tarea_crear(tarea_tarar,"tarea_tarar",SIZE,0,PRIORITY+1,NULL);
+    tarea_crear(tarea_Rx_WIFI,"tarea_Rx",SIZE,0,PRIORITY,NULL);
+    tarea_crear(tarea_Tx_WIFI,"tarea_Tx",SIZE,0,PRIORITY,NULL);
 
-    // Creación de las tareas
-/*
-    BaseType_t res =
+    /*BaseType_t res =
 	xTaskCreate(
 		tarea_tarar,                     // Funcion de la tarea a ejecutar
 		( const char * )"tarea_tarar",   // Nombre de la tarea como String amigable para el usuario
@@ -79,11 +84,11 @@ int main( void )
 		0                           	// Puntero a la tarea creada en el sistema
 	);
 
-	if(res == pdFAIL)
-	{
-		gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_TASK );
-		while(TRUE);
+	if(res == pdFAIL){
+		gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación tarea_tarar" );
+		while(TRUE){
+		}
 	}
 
 	res =
@@ -96,11 +101,11 @@ int main( void )
         0                           	// Puntero a la tarea creada en el sistema
     );
 
-    if(res == pdFAIL)
-    {
-    	gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_TASK );
-		while(TRUE);
+    if(res == pdFAIL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación tarea_Rx_WIFI" );
+    	while(TRUE){
+		}
     }
 
     res =
@@ -113,11 +118,11 @@ int main( void )
         0                           	// Puntero a la tarea creada en el sistema
     );
 
-    if(res == pdFAIL)
-    {
-    	gpioWrite( LED_ERROR , ON );
-		printf( MSG_ERROR_TASK );
-		while(TRUE);
+    if(res == pdFAIL){
+    	gpioWrite( LED2 , ON);
+		debugPrintlnString( "Error: creación tarea_Tx_WIFI" );
+		while(TRUE){
+		}
     }*/
 
     	// Iniciar scheduler
@@ -137,9 +142,22 @@ int main( void )
 
 /*==================[definiciones de funciones internas]=====================*/
 
-/*==================[definiciones de funciones externas]=====================*/
-/*
+/*ESTRUCTURA
+ * TARA
+ * MEDICION
+ * CUANTAS VECES SE MIDIO
+ * SI YA SE ENVIO POR UART
+*/
+//ENVIAR PUNTERO A LA ESTRUCTURA POR COLA Y USAR MENOS COLAS
+//ESTRUCTURA INICIAL (SE BORRA LUEGO)
+//ESTRUCTURA REGIMEN
+//ESTRUCTURA PARA ENVIAR DATOS
 
+
+//xTaskGetTickCount();
+/*==================[definiciones de funciones externas]=====================*/
+
+/*
 void tarea_Rx_WIFI( void* taskParmPtr )
 {
 	fsmButtonInit();
@@ -170,8 +188,8 @@ void tarea_Tx_WIFI( void* taskParmPtr )
 			gpioWrite( LED1, OFF );
 
 			p = (fu - OFFSET) / SCALE;
-
-			if (p > 300){
+			//chequear aca que se guardo en p (BREAKPOINT)
+			if (p < 0){
 				debugPrintString("Negativo corregido");
 				p = 0;
 			}
@@ -179,9 +197,11 @@ void tarea_Tx_WIFI( void* taskParmPtr )
 			debugPrintlnUInt(OFFSET);
 			debugPrintString( "Fuerza: " );
 			debugPrintlnUInt(fu);
-			sprintf(str_aux, "%2.2f",p);
+			sprintf(str_aux, "%.2f",p);	//PROBAR
 			debugPrintString( "Peso: " );
-			debugPrintlnInt(p);
+			debugPrintString( str_aux );
+			debugPrintEnter();
+			debugPrintlnInt(p); //251020
 
 			// Delay periódico
 			vTaskDelayUntil( &xLastWakeTime , xPeriodicity );
@@ -195,6 +215,8 @@ void tarea_medir( void* taskParmPtr )
 {
 	// ---------- CONFIGURACIONES ------------------------------
 		TickType_t xPeriodicity =  500 / portTICK_RATE_MS;		// Tarea periodica cada 1000 ms
+		//#define LED_RATE_ms 500
+		//#define LED_RATE pdMS_TO_TICKS(LED_RATE)
 		TickType_t xLastWakeTime = xTaskGetTickCount();
 		TickType_t dif = *( (TickType_t*)  taskParmPtr );
 
@@ -202,11 +224,7 @@ void tarea_medir( void* taskParmPtr )
 		unsigned char i;
 
 		//gpioWrite(DataPin,1);
-		gpioWrite(ClockPin,0);
-
-		//tarea_crear(tarea_esperar,"tarea_esperar",SIZE,0,PRIORITY+1,&TaskHandle_esperar);
-		//tarea_crear(tarea_promediar,"tarea_promediar",SIZE,0,PRIORITY+1,NULL);
-
+		gpioWrite(ClockPin , OFF);
 
 		// Crear tarea de espera
 			BaseType_t res =
@@ -219,9 +237,11 @@ void tarea_medir( void* taskParmPtr )
 				&TaskHandle_esperar                          	// Puntero a la tarea creada en el sistema
 			);
 
-			if(res == pdFAIL)
-			{
-				//error
+			if(res == pdFAIL){
+				gpioWrite( LED2 , ON);
+				debugPrintlnString( "Error: creación tarea_esperar" );
+				while(TRUE){
+				}
 			}
 
 			// Crear tarea de espera
@@ -235,9 +255,11 @@ void tarea_medir( void* taskParmPtr )
 				0                          	// Puntero a la tarea creada en el sistema
 			);
 
-			if(res == pdFAIL)
-			{
-				//error
+			if(res == pdFAIL){
+				gpioWrite( LED2 , ON);
+				debugPrintlnString( "Error: creación tarea_promediar" );
+				while(TRUE){
+				}
 			}
 
 	    // ---------- REPETIR POR SIEMPRE --------------------------
@@ -246,27 +268,26 @@ void tarea_medir( void* taskParmPtr )
 			// Esperar a que el módulo HX711 esté listo
 			if (xSemaphoreTake( sem_medir_fuerza  ,  portMAX_DELAY )){
 
-				gpioWrite( LEDG , 1 );
+				gpioWrite( LEDG , ON ); //PROBAR ON/OFF
 				vTaskDelay( dif );
-				gpioWrite( LEDG , 0 );
+				gpioWrite( LEDG , OFF );
 
 				Count = 0;
 
-				// Medir 24 pulsos
-				for (i=0;i<24;i++)
+				// Medir 24 pulsos (NO HARDCODEAR - gainX3)
+				for (i = 0 ; i < GAIN_128; i++)
 					{
-						gpioWrite(ClockPin,1);
+						gpioWrite(ClockPin , ON); //SET_ON=1 SET_OFF =0
 						Count=Count<<1;
-						gpioWrite(ClockPin,0);
+						gpioWrite(ClockPin , OFF);
 						if(gpioRead(DataPin)){
-
 							Count++;
 						}
 					}
 				// Hacer medición final
-				gpioWrite(ClockPin,1);
-				Count=Count^0x800000;
-				gpioWrite(ClockPin,0);
+				gpioWrite(ClockPin , ON);
+				Count=Count^XOR_VALUE;	//NO HARDCODEAR
+				gpioWrite(ClockPin , OFF);
 
 			xQueueSend(cola_datos_calculados , &Count,  portMAX_DELAY);
 
@@ -288,9 +309,9 @@ void tarea_esperar( void* taskParmPtr )
     // ---------- REPETIR POR SIEMPRE --------------------------
 	while ( 1 ){
 
-			gpioWrite( LEDR , 1 );
+			gpioWrite( LEDR , ON );
 			vTaskDelay( 40 / portTICK_RATE_MS );
-			gpioWrite( LEDR , 0 );
+			gpioWrite( LEDR , OFF );
 
 			if( !gpioRead(DataPin) ){
 				// Indicar que el módulo ya está listo para empezar a medir
@@ -311,7 +332,7 @@ void tarea_promediar( void* taskParmPtr )
     // ---------- CONFIGURACIONES ------------------------------
 	TickType_t xPeriodicity =  500 / portTICK_RATE_MS;		// Tarea periodica cada 1000 ms
 	TickType_t xLastWakeTime = xTaskGetTickCount();
-
+	//CANT PROMEDIADA ETIQUETA/MACRO
 	unsigned long f;
 	unsigned long sum = 0;
 	int contador = 0;
@@ -319,18 +340,18 @@ void tarea_promediar( void* taskParmPtr )
     // ---------- REPETIR POR SIEMPRE --------------------------
 	while ( 1 ){
 
-			gpioWrite( LEDB , 1 );
+			gpioWrite( LEDB , ON );
 			vTaskDelay( 40 / portTICK_RATE_MS );
-			gpioWrite( LEDB , 0 );
+			gpioWrite( LEDB , OFF );
 
 			if(xQueueReceive(cola_datos_calculados , &f,  portMAX_DELAY)){			// Esperamos tecla
 				//debugPrintString( "Espacio en cola: " );
 				//debugPrintlnUInt(uxQueueSpacesAvailable(cola_datos_calculados));
-				if (contador >= cant_promediada){
-					prom = sum / cant_promediada;
+				if (contador >= CANT_MEDICIONES){
+					prom = sum / CANT_MEDICIONES;
 					if (!tarado){
 						xQueueSend(cola_tarar , &prom,  portMAX_DELAY);
-						vTaskDelete(TaskHandle_medir);
+						vTaskDelete(TaskHandle_medir);	//AFUERA
 						vTaskDelete(NULL);
 					}
 					else{
@@ -361,9 +382,6 @@ void tarea_tarar( void* taskParmPtr )
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 
 	TickType_t tiempo_diff = 40/ portTICK_RATE_MS;
-
-	//tarea_crear(tarea_medir,"tarea_medir",SIZE,&tiempo_diff,PRIORITY+1,&TaskHandle_medir);
-
 	// Crear tarea en freeRTOS
 		BaseType_t res =
 		xTaskCreate(
@@ -375,9 +393,11 @@ void tarea_tarar( void* taskParmPtr )
 			&TaskHandle_medir                          	// Puntero a la tarea creada en el sistema
 		);
 
-		if(res == pdFAIL)
-		{
-			//error
+		if(res == pdFAIL){
+			gpioWrite( LED2 , ON);
+			debugPrintlnString( "Error: creación tarea_medir" );
+			while(TRUE){
+			}
 		}
 	unsigned long offset;
     // ---------- REPETIR POR SIEMPRE --------------------------
