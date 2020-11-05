@@ -7,6 +7,7 @@ extern QueueHandle_t queue_measurement;
 extern QueueHandle_t queue_tare;
 extern QueueHandle_t queue_force;
 extern SemaphoreHandle_t sem_measurement;
+//extern SemaphoreHandle_t sem_wait;
 
 /*==================[declaraciones de funciones internas]====================*/
 
@@ -48,6 +49,7 @@ int main( void )
 
     // Creación del semáforo
     sem_measurement = xSemaphoreCreateBinary();
+    //sem_wait = xSemaphoreCreateBinary();
 
     if(sem_measurement == NULL){
     	gpioWrite( LED_ERROR , ON );

@@ -7,11 +7,13 @@ QueueHandle_t queue_measurement;
 QueueHandle_t queue_tare;
 QueueHandle_t queue_force;
 SemaphoreHandle_t sem_measurement;
+//SemaphoreHandle_t sem_wait;
 
 /*==================[definiciones de datos internos]=========================*/
 
 volatile unsigned long OFFSET = 0;
 bool tarado = false;
+int new_measurement = 0;
 /*
 typedef enum
 {
@@ -43,6 +45,7 @@ struct platformMeasurements{
 // Handles de las tareas
 TaskHandle_t TaskHandle_wait;
 TaskHandle_t TaskHandle_measurement;
+TaskHandle_t TaskHandle_average;
 
 /*==================[definiciones de funciones internas]=====================*/
 // Tarea que mide la fuerza
@@ -56,16 +59,25 @@ void task_measurement( void* taskParmPtr )
 		// Inicialización de parámetros
 		unsigned char i;
 		unsigned long Count = 0;
+		char str_aux[50] = {};
 
 		//gpioWrite(DataPin,1);
 		gpioWrite(ClockPin , OFF);
 
-		create_task(task_wait,"task_wait",SIZE,0,PRIORITY+1,&TaskHandle_wait);
-		create_task(task_average,"task_average",SIZE,0,PRIORITY+1,NULL);
-
+		//create_task(task_wait,"task_wait",SIZE,0,PRIORITY+1,&TaskHandle_wait);
+		//create_task(task_average,"task_average",SIZE,0,PRIORITY+1,NULL);
 
 	    // ---------- REPETIR POR SIEMPRE --------------------------
 		while ( TRUE ){
+			//sprintf(str_aux, "NEW_MEAS: %d \r\n", new_measurement);
+			//uartWriteString(UART,str_aux);
+			if (new_measurement == 0){
+				vTaskResume(TaskHandle_wait);
+				vTaskResume(TaskHandle_average);
+				new_measurement = 1;
+			}
+			//Resumo las tareas de espera y promedio de fuerza
+
 
 			// Esperar a que el módulo HX711 esté listo
 			if (xSemaphoreTake( sem_measurement  ,  portMAX_DELAY )){
@@ -112,20 +124,21 @@ void task_wait( void* taskParmPtr )
     // ---------- REPETIR POR SIEMPRE --------------------------
 	while ( TRUE ){
 
-			gpioWrite( LEDR , ON );
-			vTaskDelay( 40 / portTICK_RATE_MS );
-			gpioWrite( LEDR , OFF );
+		gpioWrite( LEDR , ON );
+		vTaskDelay( 40 / portTICK_RATE_MS );
+		gpioWrite( LEDR , OFF );
 
-			if( !gpioRead(DataPin) ){
-				// Indicar que el módulo ya está listo para empezar a medir
-				xSemaphoreGive( sem_measurement );
-				vTaskDelete(NULL);
-			}
-
-			// Delay periódico
-			vTaskDelayUntil( &xLastWakeTime , xPeriodicity );
-
+		if( !gpioRead(DataPin) ){
+			// Indicar que el módulo ya está listo para empezar a medir
+			xSemaphoreGive( sem_measurement );
+			//vTaskDelete(NULL);
+			vTaskSuspend(NULL);
 		}
+
+		// Delay periódico
+		vTaskDelayUntil( &xLastWakeTime , xPeriodicity );
+
+	}
 
 }
 
@@ -140,6 +153,7 @@ void task_average( void* taskParmPtr )
 	unsigned long sum = 0;
 	int contador = 0;
 	unsigned long prom;
+	char str_aux[50] = {};
     // ---------- REPETIR POR SIEMPRE --------------------------
 	while ( TRUE ){
 
@@ -148,21 +162,24 @@ void task_average( void* taskParmPtr )
 			gpioWrite( LEDB , OFF );
 
 			if(xQueueReceive(queue_measurement , &f,  portMAX_DELAY)){
-				if (contador >= CANT_MEDICIONES){
+				if (contador == CANT_MEDICIONES){
 					prom = sum / CANT_MEDICIONES;
+					contador = 0;
+					sum = 0;
 					if (!tarado){
-						debugPrintlnUInt(prom);
 						xQueueSend(queue_tare , &prom,  portMAX_DELAY);
-						vTaskDelete(TaskHandle_measurement);
-						vTaskDelete(NULL);
 					}
 					else{
 						xQueueSend(queue_force , &prom,  portMAX_DELAY);
-						vTaskDelete(TaskHandle_measurement);
-						vTaskDelete(NULL);
 					}
+					//vTaskDelete(TaskHandle_measurement);
+					//vTaskDelete(NULL);
+					vTaskSuspend(TaskHandle_measurement);
+					vTaskSuspend(NULL);
 				}
 				else{
+					//sprintf(str_aux, "SUM: %d, CONT: %d \r\n", sum, contador);
+					//uartWriteString(UART,str_aux);
 					sum += f;
 					contador++;
 					xSemaphoreGive( sem_measurement );
@@ -185,7 +202,14 @@ void task_tare( void* taskParmPtr )
 
 	TickType_t tiempo_diff = 40 / portTICK_RATE_MS;
 
+	//Creo las tareas de fuerza
 	create_task(task_measurement,"task_measurement",SIZE,&tiempo_diff,PRIORITY+1,&TaskHandle_measurement);
+	create_task(task_wait,"task_wait",SIZE,0,PRIORITY+1,&TaskHandle_wait);
+	create_task(task_average,"task_average",SIZE,0,PRIORITY+1,&TaskHandle_average);
+
+	//Suspendo las tareas que no quiero que funcionen primero
+	vTaskSuspend(TaskHandle_wait);
+	vTaskSuspend(TaskHandle_average);
 
 	unsigned long offset;
 	char str_aux[50] = {};
@@ -205,9 +229,6 @@ void task_tare( void* taskParmPtr )
 				vTaskDelay( 40 / portTICK_RATE_MS );
 				gpioWrite( LED2 , OFF );
 				vTaskDelete(NULL);
-			}
-			else{
-				uartWriteString(UART,"Offset no pasó \r\n");
 			}
 
 			// Delay periódico

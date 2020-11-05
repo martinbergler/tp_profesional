@@ -56,12 +56,13 @@ TickType_t tiempo_down;
 TickType_t tiempo_up;
 TickType_t tiempo_diff;
 
+extern new_measurement;
+
 /* prototipo de la tarea led   */
-void task_measurement( void* taskParmPtr );
+//void task_measurement( void* taskParmPtr );
 
 // Handles de las tareas
 TaskHandle_t TaskHandle_measurement;
-//TaskHandle_t TaskHandle_medicion;
 
 TickType_t get_diff()
 {
@@ -86,7 +87,7 @@ void buttonReleased( void )
 	tiempo_up = xTaskGetTickCount();
 	tiempo_diff = tiempo_up - tiempo_down;
 
-	// Crear tarea en freeRTOS
+/*	// Crear tarea en freeRTOS
 	BaseType_t res =
 	xTaskCreate(
 		task_measurement,                     	// Funcion de la tarea a ejecutar
@@ -102,7 +103,9 @@ void buttonReleased( void )
 		gpioWrite( LED_ERROR , ON );
 		printf( MSG_ERROR_TASK );
 		while(TRUE);
-	}
+	}*/
+	new_measurement = 0;
+	vTaskResume(TaskHandle_measurement);
 
 }
 
